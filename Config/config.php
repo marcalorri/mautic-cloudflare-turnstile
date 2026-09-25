@@ -8,7 +8,7 @@
 return [
     'name'        => 'Cloudflare Turnstile',
     'description' => 'Enables Cloudflare Turnstile integration.',
-    'version'     => '1.0',
+    'version'     => '1.1.0',
     'author'      => 'Konstantin Scheumann',
 
     'routes' => [
@@ -36,6 +36,7 @@ return [
                 'class'     => \MauticPlugin\MauticTurnstileBundle\Service\TurnstileClient::class,
                 'arguments' => [
                     'mautic.helper.integration',
+                    'monolog.logger.mautic',
                 ],
             ],
         ],

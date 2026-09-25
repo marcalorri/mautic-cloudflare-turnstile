@@ -17,6 +17,21 @@ Download the .zip file, extract it into the `plugins/` directory and rename the 
 
 Clear the cache via console command `php bin/console cache:clear --env=prod` (might take a while) *OR* manually delete the `var/cache/prod` directory.
 
+## Update via console
+From the Mautic root directory (replace `v1.1.0` with the desired release):
+
+```bash
+cd plugins/MauticTurnstileBundle
+git fetch --tags && git checkout v1.1.0
+cd ../..
+php bin/console cache:clear --env=prod
+php bin/console mautic:plugins:reload --env=prod
+```
+
+If the plugin was installed from a .zip, replace the `plugins/MauticTurnstileBundle` directory with the release archive contents instead of using git.
+
+After updating, re-save every form that contains a Turnstile field: Mautic caches the form HTML and keeps serving the previous template until the form is saved again.
+
 ## Configuration
 Navigate to the Plugins page and click "Install/Upgrade Plugins". You should now see a "Cloudflare Turnstile" plugin. Open it to configure your Site Key and Secret Key from your [Cloudflare Turnstile dashboard](https://dash.cloudflare.com/?to=/:account/turnstile).
 

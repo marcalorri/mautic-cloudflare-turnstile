@@ -8,10 +8,13 @@
 namespace MauticPlugin\MauticTurnstileBundle\Service;
 
 use GuzzleHttp\Client as GuzzleClient;
+use GuzzleHttp\ClientInterface;
+use GuzzleHttp\Exception\GuzzleException;
 use Mautic\FormBundle\Entity\Field;
 use Mautic\PluginBundle\Helper\IntegrationHelper;
 use MauticPlugin\MauticTurnstileBundle\Integration\TurnstileIntegration;
 use Mautic\PluginBundle\Integration\AbstractIntegration;
+use Psr\Log\LoggerInterface;
 
 class TurnstileClient
 {
@@ -27,11 +30,17 @@ class TurnstileClient
      */
     protected $secretKey;
 
+    private $logger;
+
+    private $client;
+
     /**
      * @param IntegrationHelper $integrationHelper
      */
-    public function __construct(IntegrationHelper $integrationHelper)
+    public function __construct(IntegrationHelper $integrationHelper, LoggerInterface $logger, ClientInterface $client = null)
     {
+        $this->logger = $logger;
+        $this->client = $client ?: new GuzzleClient(['timeout' => 10]);
         $integrationObject = $integrationHelper->getIntegrationObject(TurnstileIntegration::INTEGRATION_NAME);
 
         if ($integrationObject instanceof AbstractIntegration) {
@@ -49,19 +58,42 @@ class TurnstileClient
      */
     public function verify($response, Field $field)
     {
-        $client   = new GuzzleClient(['timeout' => 10]);
-        $response = $client->post(
-            self::VERIFY_URL,
-            [
+        try {
+            $result = $this->client->request('POST', self::VERIFY_URL, [
+                'http_errors' => false,
                 'form_params' => [
                     'secret'   => $this->secretKey,
                     'response' => $response,
                 ],
-            ]
-        );
+            ]);
+        } catch (GuzzleException $exception) {
+            $this->logger->warning('Turnstile verification request failed');
 
-        $response = json_decode($response->getBody(), true);
+            return false;
+        }
 
-        return array_key_exists('success', $response) && $response['success'] === true;
+        $status = $result->getStatusCode();
+        $result = json_decode($result->getBody(), true);
+        if (!is_array($result)) {
+            $this->logger->warning('Turnstile verification returned an invalid response');
+
+            return false;
+        }
+        if ($status >= 200 && $status < 300 && isset($result['success']) && $result['success'] === true) {
+            return true;
+        }
+
+        $allowedCodes = [
+            'missing-input-secret', 'invalid-input-secret', 'missing-input-response',
+            'invalid-input-response', 'bad-request', 'timeout-or-duplicate', 'internal-error',
+        ];
+        $codes = isset($result['error-codes']) && is_array($result['error-codes'])
+            ? array_values(array_filter($result['error-codes'], function ($code) use ($allowedCodes) {
+                return is_string($code) && in_array($code, $allowedCodes, true);
+            }))
+            : [];
+        $this->logger->warning('Turnstile verification rejected', ['error_codes' => $codes]);
+
+        return false;
     }
 }
